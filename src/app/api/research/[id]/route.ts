@@ -1,15 +1,18 @@
 import type { NextRequest } from 'next/server';
 import { getRecord, upsertRecord, deleteRecord, isDbConfigured } from '@/lib/db';
+import { requireOwnerId } from '@/lib/auth-helpers';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(_req: NextRequest, ctx: RouteContext<'/api/research/[id]'>) {
   const { id } = await ctx.params;
+  const authz = await requireOwnerId();
+  if ('error' in authz) return authz.error;
   try {
     if (!isDbConfigured()) {
       return Response.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
     }
-    const record = await getRecord(id);
+    const record = await getRecord(id, authz.ownerId);
     if (!record) return Response.json({ error: 'Record not found' }, { status: 404 });
     return Response.json({ record, source: 'db' });
   } catch (err) {
@@ -20,15 +23,17 @@ export async function GET(_req: NextRequest, ctx: RouteContext<'/api/research/[i
 
 export async function PATCH(request: NextRequest, ctx: RouteContext<'/api/research/[id]'>) {
   const { id } = await ctx.params;
+  const authz = await requireOwnerId();
+  if ('error' in authz) return authz.error;
   try {
     if (!isDbConfigured()) {
       return Response.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
     }
-    const existing = await getRecord(id);
+    const existing = await getRecord(id, authz.ownerId);
     if (!existing) return Response.json({ error: 'Record not found' }, { status: 404 });
     const updates = (await request.json()) as Record<string, unknown>;
-    const merged = { ...existing, ...updates, id: existing.id };
-    const saved = await upsertRecord(merged);
+    const merged = { ...existing, ...updates, id: existing.id, ownerId: authz.ownerId };
+    const saved = await upsertRecord(merged, authz.ownerId);
     return Response.json({ record: saved, source: 'db' });
   } catch (err) {
     console.error('[api/research/[id] PATCH] failed:', err);
@@ -38,9 +43,11 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<'/api/resear
 
 export async function DELETE(_req: NextRequest, ctx: RouteContext<'/api/research/[id]'>) {
   const { id } = await ctx.params;
+  const authz = await requireOwnerId();
+  if ('error' in authz) return authz.error;
   try {
     if (!isDbConfigured()) return Response.json({ error: 'DB not configured' }, { status: 503 });
-    const ok = await deleteRecord(id);
+    const ok = await deleteRecord(id, authz.ownerId);
     if (!ok) return Response.json({ error: 'Record not found' }, { status: 404 });
     return Response.json({ ok: true });
   } catch (err) {

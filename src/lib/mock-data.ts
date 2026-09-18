@@ -20,6 +20,7 @@ export interface ResearchRecord {
   limitations: string[];
   fileName: string;
   aiProcessed: boolean;
+  ownerId?: string;
 }
 
 export interface InsightRecord {

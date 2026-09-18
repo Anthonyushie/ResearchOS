@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import type { ResearchRecord } from './mock-data';
 
 interface Toast {
@@ -39,6 +40,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
+  const router = useRouter();
+  const pathname = usePathname();
 
   const setTheme = useCallback((next: 'light' | 'dark') => {
     setThemeState(next);
@@ -78,6 +81,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/research?limit=100', { cache: 'no-store' });
+      if (res.status === 401) {
+        // Session expired — proxy handles page redirects, but API
+        // callers need an explicit push to /login
+        if (pathname !== '/login') {
+          router.push('/login');
+        }
+        setRecords([]);
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { records: ResearchRecord[]; source: string };
       setRecords(Array.isArray(data.records) ? data.records : []);
@@ -88,7 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pathname, router]);
 
   useEffect(() => {
     // Initial library load from backend (falls back to bundled mock data)

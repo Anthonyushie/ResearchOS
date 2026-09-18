@@ -1,10 +1,12 @@
 "use client";
 
-import { Upload, Menu, Sun, Moon } from 'lucide-react';
+import { Upload, Menu, Sun, Moon, LogOut } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import { signOut, useSession } from 'next-auth/react';
 
 export function Header() {
   const { setUploadModalOpen, setSidebarOpen, theme, toggleTheme } = useApp();
+  const { data: session } = useSession();
   const isDark = theme === 'dark';
 
   return (
@@ -21,11 +23,15 @@ export function Header() {
         <div className="hidden lg:flex items-center gap-2 text-[12.5px]">
           <span className="text-[var(--text-tertiary)]">Workspace</span>
           <span className="text-[var(--border-strong)]">/</span>
-          <span className="text-[var(--foreground)] font-[500]">Agricultural Sciences Lab</span>
+          <span className="text-[var(--foreground)] font-[500]">
+            {session?.user?.name ? `${session.user.name}'s Library` : 'My Library'}
+          </span>
         </div>
 
         <div className="lg:hidden min-w-0">
-          <p className="text-[13px] font-medium leading-none text-[var(--foreground)] truncate">Agricultural Sciences Lab</p>
+          <p className="text-[13px] font-medium leading-none text-[var(--foreground)] truncate">
+            {session?.user?.name ? `${session.user.name}'s Library` : 'My Library'}
+          </p>
         </div>
       </div>
 
@@ -49,6 +55,16 @@ export function Header() {
           <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
           <span>Add research</span>
         </button>
+        {session?.user && (
+          <button
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            className="inline-flex items-center justify-center h-8 w-8 border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--border-strong)] transition-colors"
+            aria-label="Sign out"
+            title={`Sign out ${session.user.email ?? ''}`}
+          >
+            <LogOut className="h-4 w-4" strokeWidth={1.75} />
+          </button>
+        )}
       </div>
     </header>
   );

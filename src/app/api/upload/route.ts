@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { upsertRecord, isDbConfigured } from '@/lib/db';
+import { requireOwnerId } from '@/lib/auth-helpers';
 import { analyzeResearchText } from '@/lib/gemini';
 import type { ResearchRecord } from '@/lib/mock-data';
 
@@ -35,6 +36,8 @@ async function extractText(file: File): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
+  const authz = await requireOwnerId();
+  if ('error' in authz) return authz.error;
   try {
     const form = await request.formData();
     const file = form.get('file');
@@ -82,6 +85,7 @@ export async function POST(request: NextRequest) {
       limitations: analysis.limitations,
       fileName: file.name,
       aiProcessed: true,
+      ownerId: authz.ownerId,
     };
 
     if (!isDbConfigured()) {
@@ -91,7 +95,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const saved = await upsertRecord(record);
+    const saved = await upsertRecord(record, authz.ownerId);
     return Response.json({ record: saved, aiUsed, source: 'db' }, { status: 201 });
   } catch (err) {
     console.error('[api/upload] failed:', err);

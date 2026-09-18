@@ -36,10 +36,12 @@ CREATE TABLE IF NOT EXISTS research_records (
   limitations JSONB NOT NULL DEFAULT '[]',
   file_name TEXT NOT NULL DEFAULT '',
   ai_processed BOOLEAN NOT NULL DEFAULT false,
+  owner_id TEXT NOT NULL DEFAULT 'legacy',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_research_type ON research_records (type);
 CREATE INDEX IF NOT EXISTS idx_research_created ON research_records (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_research_owner ON research_records (owner_id, created_at DESC);
 `;
 
 export async function ensureSchema(): Promise<void> {
@@ -62,10 +64,13 @@ export async function ensureSchema(): Promise<void> {
     limitations JSONB NOT NULL DEFAULT '[]',
     file_name TEXT NOT NULL DEFAULT '',
     ai_processed BOOLEAN NOT NULL DEFAULT false,
+    owner_id TEXT NOT NULL DEFAULT 'legacy',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await sql`ALTER TABLE research_records ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`CREATE INDEX IF NOT EXISTS idx_research_type ON research_records (type)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_research_created ON research_records (created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_research_owner ON research_records (owner_id, created_at DESC)`;
 }
 
 type DbRow = {
@@ -85,6 +90,7 @@ type DbRow = {
   limitations: unknown;
   file_name: string;
   ai_processed: boolean;
+  owner_id?: string;
 };
 
 function asStringArray(v: unknown): string[] {
@@ -124,6 +130,7 @@ export function rowToRecord(row: DbRow): ResearchRecord {
     limitations: asStringArray(row.limitations),
     fileName: row.file_name,
     aiProcessed: Boolean(row.ai_processed),
+    ownerId: typeof row.owner_id === 'string' ? row.owner_id : undefined,
   };
 }
 
@@ -135,36 +142,42 @@ function safeParse(s: string): unknown {
   }
 }
 
-export async function listRecords(limit = 100): Promise<ResearchRecord[]> {
+export async function listRecords(limit = 100, ownerId?: string): Promise<ResearchRecord[]> {
   const sql = getSql();
   await ensureSchema();
-  const rows = (await sql`SELECT * FROM research_records ORDER BY created_at DESC LIMIT ${limit}`) as unknown as DbRow[];
+  if (!ownerId) return [];
+  const rows = (await sql`SELECT * FROM research_records WHERE owner_id = ${ownerId} ORDER BY created_at DESC LIMIT ${limit}`) as unknown as DbRow[];
   return rows.map(rowToRecord);
 }
 
-export async function getRecord(id: string): Promise<ResearchRecord | null> {
+export async function getRecord(id: string, ownerId?: string): Promise<ResearchRecord | null> {
   const sql = getSql();
   await ensureSchema();
-  const rows = (await sql`SELECT * FROM research_records WHERE id = ${id} LIMIT 1`) as unknown as DbRow[];
+  const rows = ownerId
+    ? ((await sql`SELECT * FROM research_records WHERE id = ${id} AND owner_id = ${ownerId} LIMIT 1`) as unknown as DbRow[])
+    : ((await sql`SELECT * FROM research_records WHERE id = ${id} LIMIT 1`) as unknown as DbRow[]);
   if (rows.length === 0) return null;
   return rowToRecord(rows[0]);
 }
 
-export async function countRecords(): Promise<number> {
+export async function countRecords(ownerId?: string): Promise<number> {
   const sql = getSql();
   await ensureSchema();
-  const rows = (await sql`SELECT COUNT(*)::int AS count FROM research_records`) as unknown as { count: number }[];
+  const rows = ownerId
+    ? ((await sql`SELECT COUNT(*)::int AS count FROM research_records WHERE owner_id = ${ownerId}`) as unknown as { count: number }[])
+    : ((await sql`SELECT COUNT(*)::int AS count FROM research_records`) as unknown as { count: number }[]);
   return rows[0]?.count ?? 0;
 }
 
-export async function upsertRecord(record: ResearchRecord): Promise<ResearchRecord> {
+export async function upsertRecord(record: ResearchRecord, ownerId?: string): Promise<ResearchRecord> {
   const sql = getSql();
   await ensureSchema();
+  const owner = ownerId ?? record.ownerId ?? 'legacy';
   const rows = (await sql`
     INSERT INTO research_records (
       id, title, type, authors, date, topics, keywords, variables,
       experiment_name, description, extracted_text, summary,
-      findings, limitations, file_name, ai_processed
+      findings, limitations, file_name, ai_processed, owner_id
     ) VALUES (
       ${record.id}, ${record.title}, ${record.type},
       ${JSON.stringify(record.authors)}::jsonb, ${record.date},
@@ -175,7 +188,7 @@ export async function upsertRecord(record: ResearchRecord): Promise<ResearchReco
       ${JSON.stringify(record.summary)}::jsonb,
       ${JSON.stringify(record.findings)}::jsonb,
       ${JSON.stringify(record.limitations)}::jsonb,
-      ${record.fileName}, ${record.aiProcessed}
+      ${record.fileName}, ${record.aiProcessed}, ${owner}
     )
     ON CONFLICT (id) DO UPDATE SET
       title = EXCLUDED.title,
@@ -198,28 +211,34 @@ export async function upsertRecord(record: ResearchRecord): Promise<ResearchReco
   return rowToRecord(rows[0]);
 }
 
-export async function deleteRecord(id: string): Promise<boolean> {
+export async function deleteRecord(id: string, ownerId?: string): Promise<boolean> {
   const sql = getSql();
   await ensureSchema();
-  const rows = (await sql`DELETE FROM research_records WHERE id = ${id} RETURNING id`) as unknown as { id: string }[];
+  const rows = ownerId
+    ? ((await sql`DELETE FROM research_records WHERE id = ${id} AND owner_id = ${ownerId} RETURNING id`) as unknown as { id: string }[])
+    : ((await sql`DELETE FROM research_records WHERE id = ${id} RETURNING id`) as unknown as { id: string }[]);
   return rows.length > 0;
 }
 
-export async function searchRecords(query: string, limit = 20): Promise<ResearchRecord[]> {
+export async function searchRecords(query: string, ownerId?: string, limit = 20): Promise<ResearchRecord[]> {
   const sql = getSql();
   await ensureSchema();
+  if (!ownerId) return [];
   const q = `%${query.trim().toLowerCase()}%`;
-  if (!query.trim()) return listRecords(limit);
+  if (!query.trim()) return listRecords(limit, ownerId);
   const rows = (await sql`
     SELECT * FROM research_records
-    WHERE LOWER(title) LIKE ${q}
-       OR LOWER(description) LIKE ${q}
-       OR LOWER(extracted_text) LIKE ${q}
-       OR LOWER(file_name) LIKE ${q}
-       OR LOWER(topics::text) LIKE ${q}
-       OR LOWER(keywords::text) LIKE ${q}
-       OR LOWER(authors::text) LIKE ${q}
-       OR LOWER(variables::text) LIKE ${q}
+    WHERE owner_id = ${ownerId}
+      AND (
+        LOWER(title) LIKE ${q}
+        OR LOWER(description) LIKE ${q}
+        OR LOWER(extracted_text) LIKE ${q}
+        OR LOWER(file_name) LIKE ${q}
+        OR LOWER(topics::text) LIKE ${q}
+        OR LOWER(keywords::text) LIKE ${q}
+        OR LOWER(authors::text) LIKE ${q}
+        OR LOWER(variables::text) LIKE ${q}
+      )
     ORDER BY created_at DESC
     LIMIT ${limit}
   `) as unknown as DbRow[];

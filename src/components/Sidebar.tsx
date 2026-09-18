@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, FlaskConical, Database, Lightbulb, GitCompareArrows, X } from 'lucide-react';
+import { LayoutDashboard, FlaskConical, Database, Lightbulb, GitCompareArrows, X, LogOut } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import { signOut, useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -16,7 +17,17 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { sidebarOpen, setSidebarOpen } = useApp();
+  const { sidebarOpen, setSidebarOpen, records } = useApp();
+  const { data: session } = useSession();
+
+  const userName = session?.user?.name ?? 'My Library';
+  const userEmail = session?.user?.email ?? '';
+  const initials = userName
+    .split(' ')
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <>
@@ -84,8 +95,8 @@ export function Sidebar() {
 
           <div className="mt-6 px-2">
             <p className="text-[11px] leading-[1.5] text-[var(--muted-foreground)]">
-              Agricultural Sciences<br />
-              <span className="text-[var(--text-tertiary)]">12 records · updated Sep 14</span>
+              {userName}&apos;s workspace<br />
+              <span className="text-[var(--text-tertiary)]">{records.length} records · private</span>
             </p>
           </div>
         </nav>
@@ -93,13 +104,30 @@ export function Sidebar() {
         {/* Footer */}
         <div className="p-4 border-t border-[var(--border)]">
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-full bg-[var(--muted)] border border-[var(--border)] flex items-center justify-center">
-              <span className="text-[10px] font-semibold tracking-wide text-[var(--muted-foreground)]">SC</span>
+            {session?.user?.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={session.user.image}
+                alt={userName}
+                className="w-6 h-6 rounded-full border border-[var(--border)] object-cover"
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-[var(--muted)] border border-[var(--border)] flex items-center justify-center">
+                <span className="text-[10px] font-semibold tracking-wide text-[var(--muted-foreground)]">{initials}</span>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] font-medium leading-none text-[var(--foreground)] truncate">{userName}</p>
+              <p className="text-[11px] text-[var(--text-tertiary)] truncate">{userEmail || 'Private workspace'}</p>
             </div>
-            <div className="min-w-0">
-              <p className="text-[12.5px] font-medium leading-none text-[var(--foreground)]">S. Chen</p>
-              <p className="text-[11px] text-[var(--text-tertiary)]">Principal Investigator</p>
-            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--foreground)]"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
+            </button>
           </div>
         </div>
       </aside>

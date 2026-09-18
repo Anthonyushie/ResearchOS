@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { listRecords, upsertRecord, isDbConfigured } from '@/lib/db';
+import { requireOwnerId } from '@/lib/auth-helpers';
 import type { ResearchRecord } from '@/lib/mock-data';
 
 export const dynamic = 'force-dynamic';
@@ -9,12 +10,14 @@ function isValidType(t: unknown): t is ResearchRecord['type'] {
 }
 
 export async function GET(request: NextRequest) {
+  const authz = await requireOwnerId();
+  if ('error' in authz) return authz.error;
   if (!isDbConfigured()) {
     return Response.json({ records: [], source: 'none', dbConfigured: false }, { status: 503 });
   }
   try {
     const limit = Math.min(Number(request.nextUrl.searchParams.get('limit') ?? 100) || 100, 200);
-    const records = await listRecords(limit);
+    const records = await listRecords(limit, authz.ownerId);
     return Response.json({ records, source: 'db', dbConfigured: true });
   } catch (err) {
     console.error('[api/research GET] failed:', err);
@@ -23,6 +26,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authz = await requireOwnerId();
+  if ('error' in authz) return authz.error;
   if (!isDbConfigured()) {
     return Response.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
@@ -53,9 +58,10 @@ export async function POST(request: NextRequest) {
       limitations: Array.isArray(body.limitations) ? body.limitations.map(String) : [],
       fileName: typeof body.fileName === 'string' ? body.fileName : '',
       aiProcessed: Boolean(body.aiProcessed),
+      ownerId: authz.ownerId,
     };
 
-    const saved = await upsertRecord(record);
+    const saved = await upsertRecord(record, authz.ownerId);
     return Response.json({ record: saved, source: 'db' }, { status: 201 });
   } catch (err) {
     console.error('[api/research POST] failed:', err);
