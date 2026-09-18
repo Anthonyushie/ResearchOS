@@ -71,7 +71,15 @@ export function MetadataPanel({ record }: MetadataPanelProps) {
     <div className="border border-[var(--border)] bg-[var(--card)]">
       <div className="px-4 py-3 border-b border-[var(--border)] flex items-baseline justify-between">
         <h3 className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--muted-foreground)]">Metadata</h3>
-        {record.aiProcessed && <span className="text-[11px] text-[var(--primary)] font-medium">AI-indexed</span>}
+        {record.aiProcessed ? (
+          <span className="text-[11px] text-[var(--primary)] font-medium">
+            AI-indexed{record.aiModel ? ` · ${record.aiModel}` : ''}
+          </span>
+        ) : record.aiStatus === 'needs-text' ? (
+          <span className="text-[11px] text-[#B45309] dark:text-amber-300 font-medium">Needs text — AI skipped</span>
+        ) : (
+          <span className="text-[11px] text-[var(--text-tertiary)] font-medium">AI unavailable</span>
+        )}
       </div>
       <div className="px-4">
         <EditableRow label="Title" value={record.title} onSave={(v) => handleUpdate('title', v)} />
@@ -83,6 +91,14 @@ export function MetadataPanel({ record }: MetadataPanelProps) {
         <EditableRow label="Variables" value={record.variables.join(', ')} onSave={(v) => handleUpdate('variables', v)} />
         <EditableRow label="File" value={record.fileName} onSave={() => {}} />
       </div>
+      {(record.extractionChars ?? 0) > 0 && (
+        <div className="px-4 py-2.5 border-t border-[var(--border)]">
+          <p className="text-[11px] font-mono text-[var(--text-tertiary)]">
+            {record.extractionChars?.toLocaleString()} chars extracted
+            {record.extractionPages ? ` · ${record.extractionPages} pages` : ''}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

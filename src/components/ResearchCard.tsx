@@ -33,12 +33,17 @@ export function ResearchCard({ record, compact }: ResearchCardProps) {
             <TypeLabel type={record.type} />
             <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
             <span className="text-[11px] text-[var(--text-tertiary)]">{record.date}</span>
-            {record.aiProcessed && (
+            {record.aiProcessed ? (
               <>
                 <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
                 <span className="text-[11px] tracking-wide text-[var(--primary)] font-medium">Indexed</span>
               </>
-            )}
+            ) : record.aiStatus === 'needs-text' ? (
+              <>
+                <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
+                <span className="text-[11px] tracking-wide text-[#B45309] dark:text-amber-300 font-medium">Needs text</span>
+              </>
+            ) : null}
           </div>
 
           <h3 className="text-[14px] font-[550] leading-[1.35] tracking-[-0.01em] text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors line-clamp-2">

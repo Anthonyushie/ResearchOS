@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS research_records (
   file_name TEXT NOT NULL DEFAULT '',
   ai_processed BOOLEAN NOT NULL DEFAULT false,
   owner_id TEXT NOT NULL DEFAULT 'legacy',
+  extraction_chars INTEGER NOT NULL DEFAULT 0,
+  extraction_pages INTEGER,
+  ai_model TEXT NOT NULL DEFAULT '',
+  ai_status TEXT NOT NULL DEFAULT 'indexed',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_research_type ON research_records (type);
@@ -65,9 +69,17 @@ export async function ensureSchema(): Promise<void> {
     file_name TEXT NOT NULL DEFAULT '',
     ai_processed BOOLEAN NOT NULL DEFAULT false,
     owner_id TEXT NOT NULL DEFAULT 'legacy',
+    extraction_chars INTEGER NOT NULL DEFAULT 0,
+    extraction_pages INTEGER,
+    ai_model TEXT NOT NULL DEFAULT '',
+    ai_status TEXT NOT NULL DEFAULT 'indexed',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await sql`ALTER TABLE research_records ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT 'legacy'`;
+  await sql`ALTER TABLE research_records ADD COLUMN IF NOT EXISTS extraction_chars INTEGER NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE research_records ADD COLUMN IF NOT EXISTS extraction_pages INTEGER`;
+  await sql`ALTER TABLE research_records ADD COLUMN IF NOT EXISTS ai_model TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE research_records ADD COLUMN IF NOT EXISTS ai_status TEXT NOT NULL DEFAULT 'indexed'`;
   await sql`CREATE INDEX IF NOT EXISTS idx_research_type ON research_records (type)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_research_created ON research_records (created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_research_owner ON research_records (owner_id, created_at DESC)`;
@@ -91,6 +103,10 @@ type DbRow = {
   file_name: string;
   ai_processed: boolean;
   owner_id?: string;
+  extraction_chars?: number | null;
+  extraction_pages?: number | null;
+  ai_model?: string | null;
+  ai_status?: string | null;
 };
 
 function asStringArray(v: unknown): string[] {
@@ -131,6 +147,11 @@ export function rowToRecord(row: DbRow): ResearchRecord {
     fileName: row.file_name,
     aiProcessed: Boolean(row.ai_processed),
     ownerId: typeof row.owner_id === 'string' ? row.owner_id : undefined,
+    aiStatus:
+      row.ai_status === 'needs-text' || row.ai_status === 'failed' ? row.ai_status : 'indexed',
+    aiModel: typeof row.ai_model === 'string' ? row.ai_model : '',
+    extractionChars: typeof row.extraction_chars === 'number' ? row.extraction_chars : 0,
+    extractionPages: typeof row.extraction_pages === 'number' ? row.extraction_pages : undefined,
   };
 }
 
@@ -173,11 +194,13 @@ export async function upsertRecord(record: ResearchRecord, ownerId?: string): Pr
   const sql = getSql();
   await ensureSchema();
   const owner = ownerId ?? record.ownerId ?? 'legacy';
+  const aiStatus = record.aiStatus ?? (record.aiProcessed ? 'indexed' : 'failed');
   const rows = (await sql`
     INSERT INTO research_records (
       id, title, type, authors, date, topics, keywords, variables,
       experiment_name, description, extracted_text, summary,
-      findings, limitations, file_name, ai_processed, owner_id
+      findings, limitations, file_name, ai_processed, owner_id,
+      extraction_chars, extraction_pages, ai_model, ai_status
     ) VALUES (
       ${record.id}, ${record.title}, ${record.type},
       ${JSON.stringify(record.authors)}::jsonb, ${record.date},
@@ -188,7 +211,9 @@ export async function upsertRecord(record: ResearchRecord, ownerId?: string): Pr
       ${JSON.stringify(record.summary)}::jsonb,
       ${JSON.stringify(record.findings)}::jsonb,
       ${JSON.stringify(record.limitations)}::jsonb,
-      ${record.fileName}, ${record.aiProcessed}, ${owner}
+      ${record.fileName}, ${record.aiProcessed}, ${owner},
+      ${record.extractionChars ?? 0}, ${record.extractionPages ?? null},
+      ${record.aiModel ?? ''}, ${aiStatus}
     )
     ON CONFLICT (id) DO UPDATE SET
       title = EXCLUDED.title,
@@ -205,7 +230,11 @@ export async function upsertRecord(record: ResearchRecord, ownerId?: string): Pr
       findings = EXCLUDED.findings,
       limitations = EXCLUDED.limitations,
       file_name = EXCLUDED.file_name,
-      ai_processed = EXCLUDED.ai_processed
+      ai_processed = EXCLUDED.ai_processed,
+      extraction_chars = EXCLUDED.extraction_chars,
+      extraction_pages = EXCLUDED.extraction_pages,
+      ai_model = EXCLUDED.ai_model,
+      ai_status = EXCLUDED.ai_status
     RETURNING *
   `) as unknown as DbRow[];
   return rowToRecord(rows[0]);

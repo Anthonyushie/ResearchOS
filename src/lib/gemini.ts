@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import type { ResearchRecord } from './mock-data';
-import { mockExtractMetadata, mockGenerateComparison } from './ai';
+import { mockGenerateComparison } from './ai';
 
 export interface AiAnalysis {
   title: string;
@@ -22,6 +22,22 @@ export interface AiAnalysis {
   limitations: string[];
 }
 
+/** Honest AI outcome — never presented as indexed unless the model ran. */
+export type AiStatus = 'indexed' | 'needs-text' | 'failed';
+
+export interface AnalysisResult {
+  analysis: AiAnalysis;
+  aiUsed: boolean;
+  /** Model that produced the analysis ('' when AI did not run). */
+  model: string;
+  /** Characters of extracted text actually sent to the model. */
+  charsSent: number;
+  status: AiStatus;
+}
+
+/** Below this many extracted chars, text analysis would be guessing. */
+export const MIN_TEXT_CHARS = 200;
+
 export function isGeminiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
@@ -32,16 +48,39 @@ function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: key });
 }
 
-// Model cascade: newest stable first, older as fallback
-const MODELS = ['gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-flash-latest'];
+// Verified model names for the Gemini API. First success wins; the last
+// entry is a rolling alias. (Do not add unreleased names — a bad name only
+// wastes a full-timeout round trip per upload.)
+const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 
-async function generateText(prompt: string): Promise<string> {
+type JsonContents = string | Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>;
+
+/**
+ * Ask Gemini for STRICT JSON. Low temperature for extraction fidelity,
+ * JSON MIME + response schema so the shape is enforced server-side.
+ * Returns the raw text plus the model that answered.
+ */
+async function generateJson(
+  contents: JsonContents,
+  schema: Record<string, unknown>
+): Promise<{ text: string; model: string }> {
   const ai = getClient();
   let lastErr: unknown = null;
   for (const model of MODELS) {
     try {
-      const res = await ai.models.generateContent({ model, contents: prompt });
-      if (res.text) return res.text;
+      const res = await ai.models.generateContent({
+        model,
+        contents: contents as never,
+        config: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+          responseSchema: schema as never,
+        },
+      });
+      if (res.text) {
+        console.log(`[gemini] answered with ${model}`);
+        return { text: res.text, model };
+      }
       lastErr = new Error(`Empty response from ${model}`);
     } catch (err) {
       lastErr = err;
@@ -49,6 +88,47 @@ async function generateText(prompt: string): Promise<string> {
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
+
+const ANALYSIS_SCHEMA = {
+  type: 'object',
+  properties: {
+    title: { type: 'string' },
+    type: { type: 'string', enum: ['paper', 'experiment', 'dataset'] },
+    topics: { type: 'array', items: { type: 'string' } },
+    keywords: { type: 'array', items: { type: 'string' } },
+    authors: { type: 'array', items: { type: 'string' } },
+    date: { type: 'string' },
+    experimentName: { type: 'string' },
+    variables: { type: 'array', items: { type: 'string' } },
+    description: { type: 'string' },
+    summary: {
+      type: 'object',
+      properties: {
+        objective: { type: 'string' },
+        method: { type: 'string' },
+        keyFindings: { type: 'array', items: { type: 'string' } },
+        limitations: { type: 'array', items: { type: 'string' } },
+      },
+    },
+    findings: { type: 'array', items: { type: 'string' } },
+    limitations: { type: 'array', items: { type: 'string' } },
+  },
+} as const;
+
+const COMPARE_SCHEMA = {
+  type: 'object',
+  properties: {
+    similarities: { type: 'array', items: { type: 'string' } },
+    differences: { type: 'array', items: { type: 'string' } },
+  },
+} as const;
+
+const GROUND_RULES = `GROUND RULES (follow strictly):
+- You are an information-EXTRACTION system, not a writer. Use ONLY facts explicitly stated in the document text below.
+- If a field is not stated in the text, return "" for strings or [] for arrays. NEVER guess, infer, or invent authors, dates, sample sizes, statistics, DOIs, experiment names, or conclusions.
+- Every key finding must be directly supported by the text. Return 1-3 findings for short texts rather than padding.
+- "limitations": only limitations stated in the text or directly evident from it (e.g. "sample size not reported"). If none are visible, return [].
+- "description": 2-3 sentences paraphrasing what the document actually contains, nothing more.`;
 
 function safeJsonParse(text: string): Record<string, unknown> | null {
   const cleaned = text
@@ -72,85 +152,128 @@ function safeJsonParse(text: string): Record<string, unknown> | null {
   }
 }
 
-function toStringArray(v: unknown): string[] {
-  if (Array.isArray(v)) return v.map((x) => String(x)).filter(Boolean).slice(0, 12);
+function toStringArray(v: unknown, max = 12): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x)).filter(Boolean).slice(0, max);
   return [];
 }
 
-function fallbackAnalysis(fileName: string, text: string): AiAnalysis {
-  const meta = mockExtractMetadata(fileName);
-  const excerpt = text.slice(0, 500) || `Content extracted from ${fileName}.`;
+function prettifyFileName(fileName: string): string {
+  return fileName
+    .replace(/\.[^.]+$/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+}
+
+/**
+ * Honest stub used when AI cannot run (no key, no readable text, or model
+ * failure). Contains ONLY filename-derived title and real excerpt text —
+ * every other field is empty so the UI can show "not found", never fiction.
+ */
+function honestStub(fileName: string, text: string, status: AiStatus): AnalysisResult {
+  const excerpt = text.slice(0, 600);
   return {
-    ...meta,
-    type: fileName.toLowerCase().endsWith('.csv') ? 'dataset' : 'paper',
-    description: excerpt.slice(0, 280),
-    summary: {
-      objective: `Analyze ${meta.title} based on extracted content.`,
-      method: 'Automated extraction pending full AI analysis.',
-      keyFindings: [excerpt.slice(0, 160)],
-      limitations: ['AI analysis unavailable — verify against source file.'],
+    analysis: {
+      title: prettifyFileName(fileName) || fileName,
+      type: fileName.toLowerCase().endsWith('.csv') ? 'dataset' : 'paper',
+      topics: [],
+      keywords: [],
+      authors: [],
+      date: '',
+      experimentName: '',
+      variables: [],
+      description: excerpt,
+      summary: { objective: '', method: '', keyFindings: [], limitations: [] },
+      findings: [],
+      limitations: [],
     },
-    findings: [excerpt.slice(0, 160)],
-    limitations: ['AI analysis unavailable — verify against source file.'],
+    aiUsed: false,
+    model: '',
+    charsSent: 0,
+    status,
   };
 }
 
-export async function analyzeResearchText(fileName: string, extractedText: string): Promise<{ analysis: AiAnalysis; aiUsed: boolean }> {
+export async function analyzeResearchText(
+  fileName: string,
+  extractedText: string,
+  opts?: { pdfBase64?: string }
+): Promise<AnalysisResult> {
   if (!isGeminiConfigured()) {
-    return { analysis: fallbackAnalysis(fileName, extractedText), aiUsed: false };
+    return honestStub(fileName, extractedText, 'failed');
   }
+
+  const text = extractedText.trim();
+
+  // Refuse to analyze rather than hallucinate from a file name.
+  if (text.length < MIN_TEXT_CHARS && !opts?.pdfBase64) {
+    console.log(
+      `[gemini] refusing analysis for ${fileName}: only ${text.length} chars extracted`
+    );
+    return honestStub(fileName, extractedText, 'needs-text');
+  }
+
   try {
-    const truncated = extractedText.slice(0, 12000);
-    const prompt = `You are a research assistant for agricultural science. Analyze the following research document and return STRICT JSON only (no markdown, no explanation).
+    const truncated = text.slice(0, 12000);
+    const prompt = `Extract structured metadata from the following research document and return STRICT JSON matching the requested schema.
 
-Required JSON shape:
-{
-  "title": string,
-  "type": "paper" | "experiment" | "dataset",
-  "topics": string[],
-  "keywords": string[],
-  "authors": string[],
-  "date": "YYYY-MM-DD",
-  "experimentName": string,
-  "variables": string[],
-  "description": string (2-3 sentences),
-  "summary": { "objective": string, "method": string, "keyFindings": string[3-5], "limitations": string[2-4] },
-  "findings": string[2-4],
-  "limitations": string[2-4]
-}
+${GROUND_RULES}
 
-File name: ${fileName}
-Document text:
-${truncated || '(no extractable text — infer from file name only)'}`;
+File name (use ONLY as a fallback title when the document states no title): ${fileName}
 
-    const text = await generateText(prompt);
-    const parsed = safeJsonParse(text);
+DOCUMENT TEXT:
+${truncated || '(no extractable text — the full PDF is attached; read it directly)'}`;
+
+    const contents: JsonContents = opts?.pdfBase64
+      ? [
+          { inlineData: { mimeType: 'application/pdf', data: opts.pdfBase64 } },
+          { text: prompt },
+        ]
+      : prompt;
+
+    const { text: raw, model } = await generateJson(contents, ANALYSIS_SCHEMA as unknown as Record<string, unknown>);
+    const parsed = safeJsonParse(raw);
     if (!parsed) throw new Error('Gemini returned non-JSON');
 
     const type = parsed.type === 'experiment' || parsed.type === 'dataset' ? parsed.type : 'paper';
+    const summaryRaw = parsed.summary as Record<string, unknown> | undefined;
     const analysis: AiAnalysis = {
-      title: String(parsed.title || fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ')),
+      title: String(parsed.title || '') || prettifyFileName(fileName),
       type,
-      topics: toStringArray(parsed.topics).length ? toStringArray(parsed.topics) : ['Agriculture'],
+      topics: toStringArray(parsed.topics),
       keywords: toStringArray(parsed.keywords),
-      authors: toStringArray(parsed.authors).length ? toStringArray(parsed.authors) : ['Unknown Author'],
-      date: typeof parsed.date === 'string' && parsed.date ? parsed.date : new Date().toISOString().split('T')[0],
-      experimentName: String(parsed.experimentName || `EXP-${Date.now().toString(36).toUpperCase()}`),
+      authors: toStringArray(parsed.authors),
+      date:
+        typeof parsed.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(parsed.date)
+          ? parsed.date.slice(0, 10)
+          : '',
+      experimentName: String(parsed.experimentName || ''),
       variables: toStringArray(parsed.variables),
       description: String(parsed.description || '').slice(0, 600),
       summary: {
-        objective: String((parsed.summary as Record<string, unknown> | undefined)?.objective ?? ''),
-        method: String((parsed.summary as Record<string, unknown> | undefined)?.method ?? ''),
-        keyFindings: toStringArray((parsed.summary as Record<string, unknown> | undefined)?.keyFindings),
-        limitations: toStringArray((parsed.summary as Record<string, unknown> | undefined)?.limitations),
+        objective: String(summaryRaw?.objective ?? ''),
+        method: String(summaryRaw?.method ?? ''),
+        keyFindings: toStringArray(summaryRaw?.keyFindings, 5),
+        limitations: toStringArray(summaryRaw?.limitations, 4),
       },
-      findings: toStringArray(parsed.findings),
-      limitations: toStringArray(parsed.limitations),
+      findings: toStringArray(parsed.findings, 4),
+      limitations: toStringArray(parsed.limitations, 4),
     };
-    return { analysis, aiUsed: true };
+
+    // Guard: a long document yielding zero substance means a bad parse —
+    // surface it as failure, not as an empty-but-"indexed" record.
+    if (
+      text.length > 1000 &&
+      !analysis.summary.objective &&
+      analysis.summary.keyFindings.length === 0 &&
+      analysis.findings.length === 0
+    ) {
+      throw new Error('Gemini returned no substantive content');
+    }
+
+    return { analysis, aiUsed: true, model, charsSent: truncated.length, status: 'indexed' };
   } catch (err) {
-    console.error('[gemini] analyzeResearchText failed, using fallback:', err);
-    return { analysis: fallbackAnalysis(fileName, extractedText), aiUsed: false };
+    console.error('[gemini] analyzeResearchText failed:', err);
+    return honestStub(fileName, extractedText, 'failed');
   }
 }
 
@@ -162,16 +285,29 @@ export async function compareResearch(
     return { ...mockGenerateComparison(a, b), aiUsed: false };
   }
   try {
-    const prompt = `Compare two agricultural research studies and return STRICT JSON only: {"similarities": string[2-4], "differences": string[2-4]}.
+    const excerpt = (r: ResearchRecord) =>
+      [
+        `Title: ${r.title} (${r.type})`,
+        `Topics: ${r.topics.join(', ') || 'not specified'}`,
+        `Variables: ${r.variables.join(', ') || 'not specified'}`,
+        `Objective: ${r.summary.objective || 'not specified'}`,
+        `Method: ${r.summary.method || 'not specified'}`,
+        `Findings: ${r.summary.keyFindings.join('; ') || 'not specified'}`,
+        `Source excerpt: ${(r.extractedText || '').slice(0, 3000) || 'not available'}`,
+      ].join('\n');
+    const prompt = `Compare two research studies and return STRICT JSON: {"similarities": string[2-4], "differences": string[2-4]}.
+Base EVERY point on the material below. Do not invent methods, results, or statistics. If the material is thin, say what is actually comparable instead of guessing.
 
-Study A: "${a.title}" (${a.type}). Topics: ${a.topics.join(', ')}. Variables: ${a.variables.join(', ')}. Summary: ${a.summary.objective} ${a.summary.method} Findings: ${a.summary.keyFindings.join('; ')}.
+STUDY A:
+${excerpt(a)}
 
-Study B: "${b.title}" (${b.type}). Topics: ${b.topics.join(', ')}. Variables: ${b.variables.join(', ')}. Summary: ${b.summary.objective} ${b.summary.method} Findings: ${b.summary.keyFindings.join('; ')}.`;
-    const text = await generateText(prompt);
+STUDY B:
+${excerpt(b)}`;
+    const { text } = await generateJson(prompt, COMPARE_SCHEMA as unknown as Record<string, unknown>);
     const parsed = safeJsonParse(text);
     if (!parsed) throw new Error('Gemini returned non-JSON');
-    const similarities = toStringArray(parsed.similarities);
-    const differences = toStringArray(parsed.differences);
+    const similarities = toStringArray(parsed.similarities, 4);
+    const differences = toStringArray(parsed.differences, 4);
     if (!similarities.length || !differences.length) throw new Error('Empty comparison');
     return { similarities, differences, aiUsed: true };
   } catch (err) {

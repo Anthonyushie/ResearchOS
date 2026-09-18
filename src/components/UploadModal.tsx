@@ -26,6 +26,7 @@ export function UploadModal() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [metadata, setMetadata] = useState<EditableMetadata | null>(null);
   const [aiUsed, setAiUsed] = useState(false);
+  const [needsText, setNeedsText] = useState(false);
   const [error, setError] = useState('');
   const [editingField, setEditingField] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,6 +36,7 @@ export function UploadModal() {
     setFileName('');
     setSelectedFile(null);
     setMetadata(null);
+    setNeedsText(false);
     setError('');
     setEditingField(null);
   }, []);
@@ -60,6 +62,7 @@ export function UploadModal() {
       if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
       const rec = data.record as ResearchRecord;
       setAiUsed(Boolean(data.aiUsed));
+      setNeedsText(data.aiStatus === 'needs-text');
       setMetadata({
         title: rec.title,
         topics: rec.topics,
@@ -118,15 +121,21 @@ export function UploadModal() {
         await refresh();
       }
       addToast({
-        title: aiUsed ? 'Added with Gemini AI' : 'Added to library',
-        description: `"${metadata.title}" indexed.`,
+        title: needsText
+          ? 'Added without AI — text unreadable'
+          : aiUsed
+            ? 'Added with Gemini AI'
+            : 'Added to library',
+        description: needsText
+          ? `"${metadata.title}" saved as an attachment. Fill in details manually.`
+          : `"${metadata.title}" indexed.`,
       });
     } catch (err) {
       console.error('[upload] confirm failed:', err);
       addToast({ title: 'Saved locally', description: `"${metadata.title}" kept in this session.` });
     }
     handleClose();
-  }, [metadata, selectedFile, aiUsed, refresh, addToast, handleClose]);
+  }, [metadata, selectedFile, aiUsed, needsText, refresh, addToast, handleClose]);
 
   if (!uploadModalOpen) return null;
 
@@ -193,13 +202,25 @@ export function UploadModal() {
 
           {stage === 'complete' && metadata && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 border border-[#D1FAE5] bg-[#ECFDF5] dark:border-emerald-900 dark:bg-emerald-950/40 px-3 py-2.5">
-                <CheckCircle2 className="h-4 w-4 text-[#065F46] dark:text-emerald-300 shrink-0" />
-                <div>
-                  <p className="text-[12.5px] font-medium text-[#065F46] dark:text-emerald-300">Indexed</p>
-                  <p className="text-[11px] font-mono text-[#047857] dark:text-emerald-400">{fileName}</p>
+              {needsText ? (
+                <div className="flex items-start gap-2 border border-[#FDE68A] bg-[#FFFBEB] dark:border-amber-900 dark:bg-amber-950/40 px-3 py-2.5">
+                  <div>
+                    <p className="text-[12.5px] font-medium text-[#92400E] dark:text-amber-200">Saved without AI analysis</p>
+                    <p className="text-[11.5px] leading-[1.5] text-[#B45309] dark:text-amber-300/90 mt-0.5">
+                      No readable text found (scanned PDF or image?). Fields below are blank — fill in what you know manually.
+                    </p>
+                    <p className="text-[11px] font-mono text-[#B45309] dark:text-amber-400 mt-1">{fileName}</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center gap-2 border border-[#D1FAE5] bg-[#ECFDF5] dark:border-emerald-900 dark:bg-emerald-950/40 px-3 py-2.5">
+                  <CheckCircle2 className="h-4 w-4 text-[#065F46] dark:text-emerald-300 shrink-0" />
+                  <div>
+                    <p className="text-[12.5px] font-medium text-[#065F46] dark:text-emerald-300">Indexed</p>
+                    <p className="text-[11px] font-mono text-[#047857] dark:text-emerald-400">{fileName}</p>
+                  </div>
+                </div>
+              )}
 
               <p className="text-[11px] font-semibold tracking-[0.06em] uppercase text-[var(--primary)]">Extracted metadata · editable</p>
 
@@ -253,7 +274,7 @@ export function UploadModal() {
                   Close
                 </button>
                 <button onClick={handleConfirmEdits} className="flex-1 h-8 bg-[var(--primary)] text-[var(--primary-foreground)] text-[12.5px] font-medium hover:opacity-90">
-                  Done{aiUsed ? ' · AI-indexed' : ''}
+                  Done{needsText ? '' : aiUsed ? ' · AI-indexed' : ''}
                 </button>
               </div>
             </div>

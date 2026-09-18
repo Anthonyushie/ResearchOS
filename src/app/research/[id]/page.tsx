@@ -44,10 +44,26 @@ export default function ResearchDetailPage({ params }: { params: Promise<{ id: s
           </span>
           <span className="text-[11px] text-[var(--text-tertiary)]">·</span>
           <span className="text-[11px] text-[var(--text-tertiary)] font-mono">{record.date}</span>
-          {record.aiProcessed && (
+          {record.aiProcessed ? (
             <>
               <span className="text-[11px] text-[var(--text-tertiary)]">·</span>
-              <span className="text-[11px] font-medium text-[var(--primary)]">AI-indexed</span>
+              <span className="text-[11px] font-medium text-[var(--primary)]">
+                AI-indexed{record.aiModel ? ` · ${record.aiModel}` : ''}
+              </span>
+            </>
+          ) : record.aiStatus === 'needs-text' ? (
+            <>
+              <span className="text-[11px] text-[var(--text-tertiary)]">·</span>
+              <span className="text-[11px] font-medium text-[#B45309] dark:text-amber-300">
+                Text unreadable — AI skipped
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[11px] text-[var(--text-tertiary)]">·</span>
+              <span className="text-[11px] font-medium text-[var(--text-tertiary)]">
+                AI unavailable
+              </span>
             </>
           )}
         </div>

@@ -21,6 +21,14 @@ export interface ResearchRecord {
   fileName: string;
   aiProcessed: boolean;
   ownerId?: string;
+  /** Honest AI outcome: 'indexed' | 'needs-text' | 'failed'. Defaults to 'indexed' for legacy rows. */
+  aiStatus?: 'indexed' | 'needs-text' | 'failed';
+  /** Model that produced the analysis ('' when AI did not run). */
+  aiModel?: string;
+  /** Characters of source text extracted (0 = nothing readable). */
+  extractionChars?: number;
+  /** PDF page count, when known. */
+  extractionPages?: number;
 }
 
 export interface InsightRecord {
