@@ -25,6 +25,10 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: "ResearchOS — Research Intelligence",
   description: "A serious workspace for scientific research storage and intelligence.",
+  icons: {
+    icon: "/logo-mark.png",
+    apple: "/logo-mark.png",
+  },
 };
 
 export default function RootLayout({

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { LayoutDashboard, FlaskConical, Database, Lightbulb, GitCompareArrows, X, LogOut } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { signOut, useSession } from 'next-auth/react';
+import { LogoMark } from '@/components/Logo';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -47,9 +48,7 @@ export function Sidebar() {
         {/* Mark */}
         <div className="h-[56px] flex items-center justify-between px-5 border-b border-[var(--border)] shrink-0">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-[22px] h-[22px] rounded-[4px] bg-[var(--primary)] flex items-center justify-center">
-              <div className="w-[8px] h-[8px] rounded-full bg-[var(--primary-foreground)]/90" />
-            </div>
+            <LogoMark />
             <span className="text-[13.5px] font-semibold tracking-[-0.02em] text-[var(--foreground)]">ResearchOS</span>
           </Link>
           <button

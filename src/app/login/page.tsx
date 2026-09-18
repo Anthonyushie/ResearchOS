@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LogoMark } from "@/components/Logo";
 
 function LoginContent() {
   const { data: session, status } = useSession();
@@ -52,9 +53,7 @@ function LoginContent() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-[400px] border border-[var(--border)] bg-[var(--card)] p-8">
         <div className="flex items-center gap-2.5 mb-6">
-          <div className="w-[22px] h-[22px] rounded-[4px] bg-[var(--primary)] flex items-center justify-center">
-            <div className="w-[8px] h-[8px] rounded-full bg-[var(--primary-foreground)]/90" />
-          </div>
+          <LogoMark className="h-[26px] w-[26px]" />
           <span className="text-[13.5px] font-semibold tracking-[-0.02em]">
             ResearchOS
           </span>
