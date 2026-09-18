@@ -6,6 +6,7 @@ import { LayoutDashboard, FlaskConical, Database, Lightbulb, GitCompareArrows, X
 import { useApp } from '@/lib/context';
 import { signOut, useSession } from 'next-auth/react';
 import { LogoMark } from '@/components/Logo';
+import { ClearDemoButton } from '@/components/SeedDemoButton';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -97,6 +98,9 @@ export function Sidebar() {
               {userName}&apos;s workspace<br />
               <span className="text-[var(--text-tertiary)]">{records.length} records · private</span>
             </p>
+            {records.some((r) => r.id.startsWith('demo-')) && (
+              <ClearDemoButton className="mt-2" />
+            )}
           </div>
         </nav>
 

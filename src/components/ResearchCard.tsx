@@ -36,7 +36,11 @@ export function ResearchCard({ record, compact }: ResearchCardProps) {
             {record.aiProcessed ? (
               <>
                 <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
-                <span className="text-[11px] tracking-wide text-[var(--primary)] font-medium">Indexed</span>
+                {record.aiStatus === 'demo' ? (
+                  <span className="text-[11px] tracking-wide text-[#6D28D9] dark:text-violet-300 font-medium">Demo</span>
+                ) : (
+                  <span className="text-[11px] tracking-wide text-[var(--primary)] font-medium">Indexed</span>
+                )}
               </>
             ) : record.aiStatus === 'needs-text' ? (
               <>

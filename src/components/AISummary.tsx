@@ -76,7 +76,15 @@ export function AISummary({ record }: AISummaryProps) {
 
       <div className="mt-8 border border-[var(--border)] bg-[#FFFBEB] dark:bg-amber-950/40 px-3 py-2.5">
         <p className="text-[11px] leading-[1.5] text-[#854D0E] dark:text-amber-200/90">
-          <span className="font-semibold">Verification required.</span> AI-generated summary derived from source document. Verify against the original file before citing.
+          {record.aiStatus === 'demo' ? (
+            <>
+              <span className="font-semibold">Demo record.</span> Sample data for exploring ResearchOS — not real research. Delete it via Clear demo data once you add your own files.
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">Verification required.</span> AI-generated summary derived from source document. Verify against the original file before citing.
+            </>
+          )}
         </p>
       </div>
     </div>

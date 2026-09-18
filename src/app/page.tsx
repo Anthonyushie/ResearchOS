@@ -8,6 +8,7 @@ import { useApp } from '@/lib/context';
 import { ResearchCard } from '@/components/ResearchCard';
 import { SearchBar } from '@/components/SearchBar';
 import { UploadModal } from '@/components/UploadModal';
+import { SeedDemoButton } from '@/components/SeedDemoButton';
 import Link from 'next/link';
 
 export default function DashboardPage() {
@@ -178,7 +179,10 @@ export default function DashboardPage() {
               ) : (
                 <div className="py-10 text-center border border-dashed border-[var(--border)] bg-[var(--card)]">
                   <p className="text-[13px] font-medium text-[var(--foreground)]">Your library is empty</p>
-                  <p className="text-[12.5px] text-[var(--muted-foreground)] mt-1">Add your first research file to get started.</p>
+                  <p className="text-[12.5px] text-[var(--muted-foreground)] mt-1">
+                    Add your first research file, or explore with sample data.
+                  </p>
+                  <SeedDemoButton className="mt-4" />
                 </div>
               )}
             </div>

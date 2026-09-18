@@ -48,10 +48,10 @@ function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: key });
 }
 
-// Verified model names for the Gemini API. First success wins; the last
-// entry is a rolling alias. (Do not add unreleased names — a bad name only
-// wastes a full-timeout round trip per upload.)
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
+// Verified model names (Sep 2026): gemini-3.6-flash is the current model —
+// older *-flash names 404 for new API keys. gemini-2.5-flash stays last as
+// a legacy fallback for grandfathered keys. First success wins.
+const MODELS = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash'];
 
 type JsonContents = string | Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>;
 
@@ -67,23 +67,33 @@ async function generateJson(
   const ai = getClient();
   let lastErr: unknown = null;
   for (const model of MODELS) {
-    try {
-      const res = await ai.models.generateContent({
-        model,
-        contents: contents as never,
-        config: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-          responseSchema: schema as never,
-        },
-      });
-      if (res.text) {
-        console.log(`[gemini] answered with ${model}`);
-        return { text: res.text, model };
+    // One retry for transient overload (503) before moving on.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await ai.models.generateContent({
+          model,
+          contents: contents as never,
+          config: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+            responseSchema: schema as never,
+          },
+        });
+        if (res.text) {
+          console.log(`[gemini] answered with ${model}`);
+          return { text: res.text, model };
+        }
+        lastErr = new Error(`Empty response from ${model}`);
+        break;
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes('"code":503') && !msg.includes('UNAVAILABLE')) break;
+        if (attempt === 0) {
+          console.log(`[gemini] ${model} overloaded, retrying once`);
+          await new Promise((r) => setTimeout(r, 4000));
+        }
       }
-      lastErr = new Error(`Empty response from ${model}`);
-    } catch (err) {
-      lastErr = err;
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));

@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { UploadModal } from '@/components/UploadModal';
+import { SeedDemoButton } from '@/components/SeedDemoButton';
 import Link from 'next/link';
 
 type FilterType = 'all' | 'paper' | 'experiment' | 'dataset';
@@ -123,8 +124,15 @@ export default function ResearchPage() {
         </div>
       ) : (
         <div className="py-16 text-center border border-dashed border-[var(--border)] bg-[var(--card)] mt-4">
-          <p className="text-[13px] font-medium text-[var(--foreground)]">No matching research</p>
-          <p className="text-[12.5px] text-[var(--muted-foreground)] mt-1">Try a different filter or search term.</p>
+          <p className="text-[13px] font-medium text-[var(--foreground)]">
+            {records.length === 0 ? 'Your library is empty' : 'No matching research'}
+          </p>
+          <p className="text-[12.5px] text-[var(--muted-foreground)] mt-1">
+            {records.length === 0
+              ? 'Upload a file, or explore with sample data.'
+              : 'Try a different filter or search term.'}
+          </p>
+          {records.length === 0 && <SeedDemoButton className="mt-4" />}
         </div>
       )}
     </div>

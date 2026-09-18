@@ -72,9 +72,13 @@ export function MetadataPanel({ record }: MetadataPanelProps) {
       <div className="px-4 py-3 border-b border-[var(--border)] flex items-baseline justify-between">
         <h3 className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--muted-foreground)]">Metadata</h3>
         {record.aiProcessed ? (
-          <span className="text-[11px] text-[var(--primary)] font-medium">
-            AI-indexed{record.aiModel ? ` · ${record.aiModel}` : ''}
-          </span>
+          record.aiStatus === 'demo' ? (
+            <span className="text-[11px] text-[#6D28D9] dark:text-violet-300 font-medium">Demo data</span>
+          ) : (
+            <span className="text-[11px] text-[var(--primary)] font-medium">
+              AI-indexed{record.aiModel ? ` · ${record.aiModel}` : ''}
+            </span>
+          )
         ) : record.aiStatus === 'needs-text' ? (
           <span className="text-[11px] text-[#B45309] dark:text-amber-300 font-medium">Needs text — AI skipped</span>
         ) : (

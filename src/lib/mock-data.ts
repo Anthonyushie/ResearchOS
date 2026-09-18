@@ -21,8 +21,8 @@ export interface ResearchRecord {
   fileName: string;
   aiProcessed: boolean;
   ownerId?: string;
-  /** Honest AI outcome: 'indexed' | 'needs-text' | 'failed'. Defaults to 'indexed' for legacy rows. */
-  aiStatus?: 'indexed' | 'needs-text' | 'failed';
+  /** Honest AI outcome: 'indexed' | 'needs-text' | 'failed' | 'demo'. Defaults to 'indexed' for legacy rows. */
+  aiStatus?: 'indexed' | 'needs-text' | 'failed' | 'demo';
   /** Model that produced the analysis ('' when AI did not run). */
   aiModel?: string;
   /** Characters of source text extracted (0 = nothing readable). */

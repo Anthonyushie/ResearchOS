@@ -148,7 +148,9 @@ export function rowToRecord(row: DbRow): ResearchRecord {
     aiProcessed: Boolean(row.ai_processed),
     ownerId: typeof row.owner_id === 'string' ? row.owner_id : undefined,
     aiStatus:
-      row.ai_status === 'needs-text' || row.ai_status === 'failed' ? row.ai_status : 'indexed',
+      row.ai_status === 'needs-text' || row.ai_status === 'failed' || row.ai_status === 'demo'
+        ? row.ai_status
+        : 'indexed',
     aiModel: typeof row.ai_model === 'string' ? row.ai_model : '',
     extractionChars: typeof row.extraction_chars === 'number' ? row.extraction_chars : 0,
     extractionPages: typeof row.extraction_pages === 'number' ? row.extraction_pages : undefined,

@@ -60,7 +60,9 @@ export async function POST(request: NextRequest) {
       aiProcessed: Boolean(body.aiProcessed),
       ownerId: authz.ownerId,
       aiStatus:
-        body.aiStatus === 'needs-text' || body.aiStatus === 'failed' ? body.aiStatus : 'indexed',
+        body.aiStatus === 'needs-text' || body.aiStatus === 'failed' || body.aiStatus === 'demo'
+          ? body.aiStatus
+          : 'indexed',
       aiModel: typeof body.aiModel === 'string' ? body.aiModel : '',
       extractionChars: typeof body.extractionChars === 'number' ? body.extractionChars : 0,
       extractionPages: typeof body.extractionPages === 'number' ? body.extractionPages : undefined,

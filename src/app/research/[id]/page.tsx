@@ -47,9 +47,15 @@ export default function ResearchDetailPage({ params }: { params: Promise<{ id: s
           {record.aiProcessed ? (
             <>
               <span className="text-[11px] text-[var(--text-tertiary)]">·</span>
-              <span className="text-[11px] font-medium text-[var(--primary)]">
-                AI-indexed{record.aiModel ? ` · ${record.aiModel}` : ''}
-              </span>
+              {record.aiStatus === 'demo' ? (
+                <span className="text-[11px] font-medium text-[#6D28D9] dark:text-violet-300">
+                  Demo data
+                </span>
+              ) : (
+                <span className="text-[11px] font-medium text-[var(--primary)]">
+                  AI-indexed{record.aiModel ? ` · ${record.aiModel}` : ''}
+                </span>
+              )}
             </>
           ) : record.aiStatus === 'needs-text' ? (
             <>
