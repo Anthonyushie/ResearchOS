@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { upsertRecord, isDbConfigured } from '@/lib/db';
 import { requireOwnerId } from '@/lib/auth-helpers';
-import { analyzeResearchText, MIN_TEXT_CHARS } from '@/lib/gemini';
+import { analyzeResearchText, isGeminiConfigured, MIN_TEXT_CHARS } from '@/lib/gemini';
 import type { ResearchRecord } from '@/lib/mock-data';
 
 export const dynamic = 'force-dynamic';
@@ -42,16 +42,25 @@ async function extractSource(file: File): Promise<SourceExtraction> {
   }
 
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
-    let parser: { getText: () => Promise<{ text?: string; total?: number }>; getInfo?: () => Promise<{ info?: { Title?: string; Author?: string } }>; destroy: () => Promise<void> } | null = null;
+    let parser: {
+      getText: () => Promise<{ text?: string; total?: number }>;
+      getInfo?: () => Promise<{ info?: { Title?: string; Author?: string } }>;
+      destroy: () => Promise<void>;
+    } | null = null;
     try {
       const { PDFParse } = (await import('pdf-parse')) as unknown as {
         PDFParse: new (opts: { data: Buffer }) => NonNullable<typeof parser>;
       };
       parser = new PDFParse({ data: buf });
-      const [textRes, infoRes] = await Promise.all([
-        parser.getText(),
-        parser.getInfo?.().catch(() => null) ?? null,
-      ]);
+      // Sequential: getText and getInfo share one pdf.js document and must
+      // not run concurrently.
+      const textRes = await parser.getText();
+      let infoRes: { info?: { Title?: string; Author?: string } } | null = null;
+      try {
+        infoRes = (await parser.getInfo?.()) ?? null;
+      } catch (infoErr) {
+        console.error('[upload] pdf getInfo failed (non-fatal):', infoErr);
+      }
       const text = (textRes.text ?? '').slice(0, 20000);
       const pages = typeof textRes.total === 'number' ? textRes.total : undefined;
       console.log(
@@ -182,6 +191,7 @@ export async function POST(request: NextRequest) {
         record: saved,
         aiUsed,
         aiStatus,
+        geminiConfigured: isGeminiConfigured(),
         extraction: { chars: extractedText.length, pages: source.pages ?? null },
         minChars: MIN_TEXT_CHARS,
         source: 'db',
