@@ -12,6 +12,8 @@ Routes live under `src/app/api`. Except for Auth.js handlers and the health chec
 | `POST /api/upload` | Multipart `file`; optional JSON string `metadata` | `{ record, aiUsed, aiStatus, extraction, source, … }` (`201`) | Max 50 MB. `source: "mock"` means returned but not persisted when DB is absent. |
 | `GET /api/search?q=term` | Query string `q` | `{ results, query, source: "db" }` | Empty query returns an empty result set. Nonempty search needs DB. |
 | `POST /api/compare` | JSON `{ idA, idB }` or `{ recordA, recordB }` | `{ similarities, differences, aiUsed }` | Requires two distinct records. Full objects are accepted directly; IDs resolve through owner-scoped DB lookups. |
+| `POST /api/ask` | JSON `{ question }` (5–300 characters) | `{ points, mode, note, recordCount }` | Searches up to 100 caller-owned records, sends up to 6 matches to Gemini, and returns linked evidence. On model failure, returns stored findings labeled `source-excerpts`. |
+| `POST /api/insights` | None | `{ ideas, mode, recordCount }` | Uses caller-owned findings and limitations to suggest up to 3 follow-up studies. Requires at least 2 records; source-derived limitation cards are the fallback. |
 | `POST /api/seed` | None | `{ seeded, source: "db" }` (`201`) | Only when caller’s library is empty; otherwise `409`. |
 | `DELETE /api/seed` | None | `{ removed, source: "db" }` | Removes caller’s `demo-*` records. |
 | `GET /api/health` | None | `{ ok, db, gemini, timestamp }` | No session check in handler. DB connectivity decides `200` vs `503`; reports Gemini configuration, not a live model call. |
@@ -19,7 +21,7 @@ Routes live under `src/app/api`. Except for Auth.js handlers and the health chec
 
 ## Shapes used by the UI
 
-`ResearchRecord` is defined in `src/lib/mock-data.ts` and mapped to Postgres by `src/lib/db.ts`. Search results contain `{ record, relevance, matchReason, matchingTopics, excerpt }`. Relevance is a heuristic percentage for display. Upload `aiStatus` is `indexed`, `needs-text`, or `failed`; demo records use `demo`.
+`ResearchRecord` is defined in `src/lib/mock-data.ts` and mapped to Postgres by `src/lib/db.ts`. Search results contain `{ record, relevance, matchReason, matchingTopics, excerpt }`. Relevance is a heuristic percentage for display. Ask points contain `claim` and `sources`; each source has a record ID, title, type, excerpt, and demo flag. Gap ideas contain a title, gap, next step, and linked sources. Upload `aiStatus` is `indexed`, `needs-text`, or `failed`; demo records use `demo`.
 
 ## Common errors
 

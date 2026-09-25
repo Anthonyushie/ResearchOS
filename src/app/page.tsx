@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Search, ArrowUpRight } from 'lucide-react';
 import { searchResearch, type SearchResult } from '@/lib/search';
-import { insightRecords } from '@/lib/mock-data';
+import { fallbackGaps } from '@/lib/research-intelligence';
 import { useApp } from '@/lib/context';
 import { ResearchCard } from '@/components/ResearchCard';
 import { SearchBar } from '@/components/SearchBar';
@@ -44,7 +44,8 @@ export default function DashboardPage() {
   ];
 
   const recentRecords = records.slice(0, 5);
-  const recentInsights = insightRecords.slice(0, 3);
+  const researchGaps = fallbackGaps(records);
+  const recentInsights = researchGaps.slice(0, 3);
   const paperCount = records.filter((r) => r.type === 'paper').length;
   const experimentCount = records.filter((r) => r.type === 'experiment').length;
   const datasetCount = records.filter((r) => r.type === 'dataset').length;
@@ -61,7 +62,7 @@ export default function DashboardPage() {
             <p className="mt-2 text-[13px] leading-[1.5] text-[var(--muted-foreground)]">
               {loading
                 ? 'Loading library…'
-                : `${records.length} records · ${datasetCount} datasets · ${experimentCount} experiments · ${insightRecords.length} insights`}
+                : `${records.length} records · ${datasetCount} datasets · ${experimentCount} experiments · ${researchGaps.length} research gaps`}
             </p>
           </div>
           <Link href="/research" className="hidden sm:inline-flex text-[12.5px] font-medium text-[var(--primary)] hover:underline underline-offset-4 shrink-0">
@@ -192,9 +193,9 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <section className="lg:col-span-8">
               <div className="flex items-baseline justify-between border-b border-[var(--border)] pb-3 mb-1">
-                <h2 className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--muted-foreground)]">Observations</h2>
+                <h2 className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--muted-foreground)]">Research gaps</h2>
                 <Link href="/insights" className="text-[12.5px] font-medium text-[var(--primary)] hover:underline underline-offset-4">
-                  All insights →
+                  Explore insights →
                 </Link>
               </div>
               <div className="divide-y divide-[var(--border)]">
@@ -203,22 +204,16 @@ export default function DashboardPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10.5px] font-semibold tracking-[0.06em] uppercase text-[var(--text-tertiary)]">{insight.category}</span>
-                          {insight.correlation !== undefined && (
-                            <>
-                              <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
-                              <span className="text-[11px] font-medium text-[var(--primary)]">r = +{insight.correlation.toFixed(2)}</span>
-                            </>
-                          )}
+                          <span className="text-[10.5px] font-semibold tracking-[0.06em] uppercase text-[var(--text-tertiary)]">Stated limitation</span>
                         </div>
                         <h3 className="text-[13.5px] font-[550] leading-[1.4] tracking-[-0.01em] text-[var(--foreground)]">{insight.title}</h3>
-                        <p className="mt-1 text-[12.5px] leading-[1.5] text-[var(--muted-foreground)] line-clamp-2">{insight.description}</p>
+                        <p className="mt-1 text-[12.5px] leading-[1.5] text-[var(--muted-foreground)] line-clamp-2">{insight.gap}</p>
                       </div>
                     </div>
                   </div>
                 )) : (
                   <p className="py-6 text-[12.5px] leading-[1.6] text-[var(--muted-foreground)]">
-                    No observations yet. Insights appear here once you have indexed research to analyze.
+                    Add at least two records with stated limitations to explore research gaps.
                   </p>
                 )}
               </div>
@@ -241,12 +236,12 @@ export default function DashboardPage() {
                     <dd className="text-[13px] font-medium font-mono text-[var(--foreground)]">{datasetCount}</dd>
                   </div>
                   <div className="flex justify-between items-baseline">
-                    <dt className="text-[12.5px] text-[var(--muted-foreground)]">Insights</dt>
-                    <dd className="text-[13px] font-medium font-mono text-[var(--foreground)]">{insightRecords.length}</dd>
+                    <dt className="text-[12.5px] text-[var(--muted-foreground)]">Research gaps</dt>
+                    <dd className="text-[13px] font-medium font-mono text-[var(--foreground)]">{researchGaps.length}</dd>
                   </div>
                 </dl>
                 <p className="mt-4 text-[11px] leading-[1.5] text-[var(--text-tertiary)]">
-                  Index updated Sep 14. Search indexes titles, topics, variables, and extracted text.
+                  Search indexes titles, topics, variables, and extracted text.
                 </p>
               </div>
 

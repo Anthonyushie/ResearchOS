@@ -35,7 +35,7 @@ The table is created and adjusted by `ensureSchema()` during database calls. The
 | Upload says “Text unreadable — AI skipped” | Text extraction yielded under 200 characters and no usable inline PDF was supplied. Try a text-based PDF or TXT/Markdown source. |
 | Upload says “Saved without AI analysis” | Check `GEMINI_API_KEY` and server logs for model errors. The app tries `gemini-3.5-flash-lite` first and `gemini-3.6-flash` if needed; transient 503 responses can still occur. Saved text and metadata can be reviewed manually. |
 | Search misses an older record | The overview API searches DB candidates, but the Research page and relatedness use only the 100 records loaded by `AppProvider`. Also check whether the query matches stored text or metadata. |
-| Insights stays empty | Cross-record insight generation is not implemented; `insightRecords` is empty. |
+| Insights shows no gap ideas | Add at least two records with findings or stated limitations. The page shows source-derived limitations while Gemini is unavailable. |
 
 ## Current operational limits
 

@@ -94,8 +94,8 @@ function computeRelevance(record: ResearchRecord, queryTokens: string[]): { scor
 export function searchResearch(query: string, records: ResearchRecord[]): SearchResult[] {
   if (!query.trim()) return [];
 
-  const queryTokens = tokenize(query)
-    .filter(t => !['show', 'me', 'find', 'search', 'for', 'the', 'a', 'an', 'in', 'on', 'and', 'or', 'to', 'of', 'with', 'which', 'what', 'how', 'that', 'related', 'about', 'my', 'all', 'any', 'are', 'is', 'was', 'were', 'do', 'does', 'did', 'have', 'has', 'had', 'been', 'being', 'be', 'will', 'would', 'could', 'should', 'can', 'may', 'might', 'across'].filter(Boolean));
+  const stopWords = new Set(['show', 'me', 'find', 'search', 'for', 'the', 'a', 'an', 'in', 'on', 'and', 'or', 'to', 'of', 'with', 'which', 'what', 'how', 'that', 'related', 'about', 'my', 'all', 'any', 'are', 'is', 'was', 'were', 'do', 'does', 'did', 'have', 'has', 'had', 'been', 'being', 'be', 'will', 'would', 'could', 'should', 'can', 'may', 'might', 'across']);
+  const queryTokens = tokenize(query).filter(t => !stopWords.has(t));
 
   if (queryTokens.length === 0) return [];
 

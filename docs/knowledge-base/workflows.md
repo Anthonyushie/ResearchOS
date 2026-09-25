@@ -10,8 +10,8 @@
 ## Upload a document
 
 1. `UploadModal` sends multipart form data with a `file` field to `POST /api/upload`. Uploading immediately creates a record; the later “Done” step saves metadata edits by `PATCH /api/research/[id]`.
-2. The server rejects files over 50 MB. TXT, Markdown, and files with a `text/*` MIME type are decoded as UTF-8. A CSV with another or missing MIME type goes through a separate preview path that includes the first rows and row count. PDF text and embedded title/author are read with `pdf-parse`. Images and other non-text formats have no extractor. The file picker offers PDF, CSV, TXT, and image extensions; Markdown can be sent through drag-and-drop or the API.
-3. General text and PDF extraction keeps at most 20,000 characters. The Gemini prompt includes at most the first 12,000 extracted characters. The separate CSV preview includes at most 31 lines and 12,000 characters. PDFs up to 20 MB may also be sent inline to Gemini, which helps with scanned PDFs.
+2. The server rejects files over 50 MB. TXT, Markdown, and files with a `text/*` MIME type are decoded as UTF-8. A CSV with another or missing MIME type goes through a separate preview path that includes the first rows and row count. PDF text and embedded title/author are read with `pdf-parse`. Images and other non-text formats have no extractor. The file picker offers PDF, CSV, TXT, and Markdown.
+3. General text and PDF extraction keeps at most 20,000 characters. The Gemini prompt includes at most the first 12,000 extracted characters. The separate CSV preview includes at most 31 lines and 12,000 characters. PDFs up to 20 MB are sent inline to Gemini when text extraction is thin, which helps with scanned PDFs.
 4. If there is no Gemini key, Gemini fails, or source text is too thin without an eligible PDF, the server saves an honest stub. `aiStatus` distinguishes `failed` from `needs-text`; successful model extraction is `indexed`.
 5. The record stores extracted text and metadata. The original file bytes are discarded. With no database URL, the upload response warns that it was not persisted.
 
@@ -23,9 +23,11 @@ The UI’s editable fields after upload are title, topics, keywords, authors, da
 - Research `/research`: filter the loaded list by record type and title, keywords, topics, authors, or variables. This is client-side filtering over the provider’s loaded records.
 - Datasets `/datasets`: show loaded records whose `type` is `dataset`.
 - Detail `/research/[id]`: show one loaded record’s description, source excerpt, summary, metadata, and locally computed related records.
-- Insights `/insights`: currently shows an empty state because the source `insightRecords` array is empty.
+- Insights `/insights`: asks questions against matching records, proposes follow-up experiments from findings and limitations, and maps shared topic tags. Questions and gap proposals use Gemini when available; source-derived fallbacks remain visible on model failure. Answers and suggestions link to supporting records.
 
 The provider loads 100 records by default, so client-side lists, filters, and relatedness may omit older records once a workspace exceeds that count. The list API itself accepts a limit up to 200.
+
+The Ask route also loads up to 100 caller-owned records and ranks them lexically before sending at most six to Gemini. The gap route sends at most 20 records with findings, limitations, or readable extracted text. Neither stores generated output; revisiting Insights may generate new ideas.
 
 ## Compare two records
 

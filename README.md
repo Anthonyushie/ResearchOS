@@ -1,6 +1,6 @@
 # ResearchOS
 
-ResearchOS is a private research library for papers, experiments, and datasets. Sign in with Google, upload a document, review extracted metadata and summaries, search the library, and compare two records. Research records are stored in Neon Postgres. Gemini analysis is optional; the app labels records when analysis could not run.
+ResearchOS is a private research library for papers, experiments, and datasets. Sign in with Google, upload a document, review extracted metadata and summaries, search the library, compare two records, ask evidence-backed questions, explore research gaps, and map topic connections. Research records are stored in Neon Postgres. Gemini analysis is optional; the app labels records when analysis could not run.
 
 ## Start locally
 
