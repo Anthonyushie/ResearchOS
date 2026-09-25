@@ -71,9 +71,12 @@ async function extractSource(file: File): Promise<SourceExtraction> {
         pages,
         docTitle: String(infoRes?.info?.Title ?? '').trim(),
         docAuthor: String(infoRes?.info?.Author ?? '').trim(),
-        // Let Gemini read the native PDF when text extraction is thin and
-        // the file fits inline limits — covers scanned PDFs.
-        pdfBase64: buf.length <= MAX_INLINE_BYTES ? buf.toString('base64') : undefined,
+        // Send the native PDF only when extraction is thin. Sending both a
+        // text-rich PDF and its extracted text adds latency and failure risk.
+        pdfBase64:
+          text.trim().length < MIN_TEXT_CHARS && buf.length <= MAX_INLINE_BYTES
+            ? buf.toString('base64')
+            : undefined,
       };
     } catch (err) {
       console.error('[upload] pdf-parse failed:', err);

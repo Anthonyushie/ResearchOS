@@ -48,10 +48,9 @@ function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: key });
 }
 
-// Verified model names (Sep 2026): gemini-3.6-flash is the current model —
-// older *-flash names 404 for new API keys. gemini-2.5-flash stays last as
-// a legacy fallback for grandfathered keys. First success wins.
-const MODELS = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash'];
+// Prefer the model intended for document parsing. Keep a second model for
+// transient service failures; first successful response wins.
+const MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
 
 type JsonContents = string | Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>;
 
@@ -88,7 +87,8 @@ async function generateJson(
       } catch (err) {
         lastErr = err;
         const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes('"code":503') && !msg.includes('UNAVAILABLE')) break;
+        const status = err && typeof err === 'object' && 'status' in err ? err.status : null;
+        if (status !== 503 && !/\b503\b|UNAVAILABLE/i.test(msg)) break;
         if (attempt === 0) {
           console.log(`[gemini] ${model} overloaded, retrying once`);
           await new Promise((r) => setTimeout(r, 4000));

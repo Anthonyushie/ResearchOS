@@ -26,7 +26,7 @@ export function UploadModal() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [metadata, setMetadata] = useState<EditableMetadata | null>(null);
   const [aiUsed, setAiUsed] = useState(false);
-  const [needsText, setNeedsText] = useState(false);
+  const [aiStatus, setAiStatus] = useState<ResearchRecord['aiStatus']>('failed');
   const [error, setError] = useState('');
   const [editingField, setEditingField] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,7 +36,8 @@ export function UploadModal() {
     setFileName('');
     setSelectedFile(null);
     setMetadata(null);
-    setNeedsText(false);
+    setAiUsed(false);
+    setAiStatus('failed');
     setError('');
     setEditingField(null);
   }, []);
@@ -62,7 +63,7 @@ export function UploadModal() {
       if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
       const rec = data.record as ResearchRecord;
       setAiUsed(Boolean(data.aiUsed));
-      setNeedsText(data.aiStatus === 'needs-text');
+      setAiStatus(data.aiStatus ?? 'failed');
       setMetadata({
         title: rec.title,
         topics: rec.topics,
@@ -121,21 +122,23 @@ export function UploadModal() {
         await refresh();
       }
       addToast({
-        title: needsText
+        title: aiStatus === 'needs-text'
           ? 'Added without AI — text unreadable'
           : aiUsed
             ? 'Added with Gemini AI'
-            : 'Added to library',
-        description: needsText
+            : 'Added without AI — analysis unavailable',
+        description: aiStatus === 'needs-text'
           ? `"${metadata.title}" saved as an attachment. Fill in details manually.`
-          : `"${metadata.title}" indexed.`,
+          : aiUsed
+            ? `"${metadata.title}" indexed.`
+            : `"${metadata.title}" saved with sparse metadata. You can edit its details manually.`,
       });
     } catch (err) {
       console.error('[upload] confirm failed:', err);
       addToast({ title: 'Saved locally', description: `"${metadata.title}" kept in this session.` });
     }
     handleClose();
-  }, [metadata, selectedFile, aiUsed, needsText, refresh, addToast, handleClose]);
+  }, [metadata, selectedFile, aiUsed, aiStatus, refresh, addToast, handleClose]);
 
   if (!uploadModalOpen) return null;
 
@@ -147,7 +150,7 @@ export function UploadModal() {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] sticky top-0 bg-[var(--card)]">
           <div>
             <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--foreground)]">Add research</h2>
-            <p className="text-[11.5px] text-[var(--muted-foreground)] mt-0.5">PDF, CSV, TXT, or images · indexed for search</p>
+            <p className="text-[11.5px] text-[var(--muted-foreground)] mt-0.5">PDF, CSV, TXT, or Markdown · indexed for search</p>
           </div>
           <button onClick={handleClose} className="p-1 text-[var(--text-tertiary)] hover:text-[var(--foreground)]">
             <X className="h-4 w-4" />
@@ -162,7 +165,7 @@ export function UploadModal() {
               onClick={() => fileInputRef.current?.click()}
               className="border border-dashed border-[var(--border-strong)] bg-[var(--surface-hover)]/50 py-10 px-6 text-center cursor-pointer hover:border-[var(--primary)] hover:bg-[var(--accent)]/50 transition-colors"
             >
-              <input ref={fileInputRef} type="file" accept=".pdf,.csv,.txt,.png,.jpg,.jpeg" onChange={handleFileSelect} className="hidden" />
+              <input ref={fileInputRef} type="file" accept=".pdf,.csv,.txt,.md" onChange={handleFileSelect} className="hidden" />
               <FileText className="h-6 w-6 text-[var(--text-tertiary)] mx-auto mb-3" strokeWidth={1.5} />
               <p className="text-[13px] font-medium text-[var(--foreground)]">Drop file or click to browse</p>
               <p className="text-[11.5px] text-[var(--muted-foreground)] mt-1">Maximum 50 MB</p>
@@ -202,12 +205,14 @@ export function UploadModal() {
 
           {stage === 'complete' && metadata && (
             <div className="space-y-4">
-              {needsText ? (
+              {aiStatus !== 'indexed' ? (
                 <div className="flex items-start gap-2 border border-[#FDE68A] bg-[#FFFBEB] dark:border-amber-900 dark:bg-amber-950/40 px-3 py-2.5">
                   <div>
                     <p className="text-[12.5px] font-medium text-[#92400E] dark:text-amber-200">Saved without AI analysis</p>
                     <p className="text-[11.5px] leading-[1.5] text-[#B45309] dark:text-amber-300/90 mt-0.5">
-                      No readable text found (scanned PDF or image?). Fields below are blank — fill in what you know manually.
+                      {aiStatus === 'needs-text'
+                        ? 'No readable text was extracted. Scanned PDFs over 20 MB cannot be sent to Gemini inline. Fill in the fields manually or try a smaller, text-based PDF.'
+                        : 'Gemini analysis did not complete. The file was saved with only extracted text and basic metadata; you can fill in the fields manually.'}
                     </p>
                     <p className="text-[11px] font-mono text-[#B45309] dark:text-amber-400 mt-1">{fileName}</p>
                   </div>
@@ -222,7 +227,7 @@ export function UploadModal() {
                 </div>
               )}
 
-              <p className="text-[11px] font-semibold tracking-[0.06em] uppercase text-[var(--primary)]">Extracted metadata · editable</p>
+              <p className="text-[11px] font-semibold tracking-[0.06em] uppercase text-[var(--primary)]">{aiUsed ? 'Extracted metadata' : 'Document metadata'} · editable</p>
 
               <div className="border border-[var(--border)] divide-y divide-[var(--border)]">
                 {[
@@ -274,7 +279,7 @@ export function UploadModal() {
                   Close
                 </button>
                 <button onClick={handleConfirmEdits} className="flex-1 h-8 bg-[var(--primary)] text-[var(--primary-foreground)] text-[12.5px] font-medium hover:opacity-90">
-                  Done{needsText ? '' : aiUsed ? ' · AI-indexed' : ''}
+                  Done{aiUsed ? ' · AI-indexed' : ''}
                 </button>
               </div>
             </div>
